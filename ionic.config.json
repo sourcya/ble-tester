@@ -1,0 +1,7 @@
+{
+  "name": "BLE Tester",
+  "integrations": {
+    "capacitor": {}
+  },
+  "type": "react"
+}
