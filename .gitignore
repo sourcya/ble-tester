@@ -15,6 +15,10 @@ package-lock.json
 /resources/android
 resources/ios
 
+# firebase
+firebase-debug.log
+.firebase*
+
 # misc
 .DS_Store
 .env.local

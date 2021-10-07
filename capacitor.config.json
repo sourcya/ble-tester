@@ -1,5 +1,5 @@
 {
-  "appId": "io.sourcya.mutasim.ble.tester.app",
+  "appId": "io.sourcya.ble.tester.app",
   "appName": "BLE Tester",
   "bundledWebRuntime": false,
   "npmClient": "npm",
