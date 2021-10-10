@@ -142,7 +142,6 @@ class BleTest extends React.Component {
               }
             }
           )
-        this.state.services ? console.log(this.state.services) : console.log('No Services Found')
       }
       catch (e){
         this.catchError(e, 'Cannot Connect Error')
@@ -168,7 +167,7 @@ class BleTest extends React.Component {
           let bin = {}
           for (let i = 0; i < value.byteLength; i++) {
             bin.uint8 += value.getUint8(i)
-            text.unit8 += String.fromCharCode(value.getUint16(i))
+            text.uint8 += String.fromCharCode(value.getUint8(i))
           }
           this.setState({
             data:
@@ -208,7 +207,7 @@ class BleTest extends React.Component {
             let bin = {}
             for (let i = 0; i < value.byteLength; i++) {
               bin.uint8 += value.getUint8(i)
-              text.unit8 += String.fromCharCode(value.getUint16(i))
+              text.uint8 += String.fromCharCode(value.getUint8(i))
             }
             this.setState({
               data:
@@ -259,8 +258,10 @@ class BleTest extends React.Component {
           loading: false,
           devices: [],
           selectedDevice: {},
-          services: []
+          services: [],
+          showDataModal: false
         })
+        console.error(e)
     }
 
     componentDidMount() {
@@ -310,8 +311,8 @@ class BleTest extends React.Component {
                           <IonLabel>
                             <h3>{data.serviceUUID}</h3>
                             <h4>{data.chxUUID}</h4>
-                            <p>{data.bin}</p>
-                            <p>{data.text}</p>
+                            <p>{data.bin.uint8}</p>
+                            <p>{data.text.uint8}</p>
                           </IonLabel>
                         </IonItem>
                       )
@@ -364,7 +365,6 @@ class BleTest extends React.Component {
                                 <IonCardContent>
                                         { 
                                           service.characteristics.map( (chx) => {
-                                            console.log(service)
                                               return (
                                                 <IonGrid key={chx.uuid}>
                                                   <IonRow class="ion-justify-content-center">
