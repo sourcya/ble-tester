@@ -9,8 +9,8 @@ import {
   IonTabs
 } from '@ionic/react';
 import { IonReactRouter } from '@ionic/react-router';
-import { bluetoothOutline } from 'ionicons/icons';
-import BleTest from './pages/BleTest';
+import { bluetoothOutline, settingsOutline } from 'ionicons/icons';
+import { Terminal, Settings } from './pages'
 
 /* Core CSS required for Ionic components to work properly */
 import '@ionic/react/css/core.css';
@@ -36,12 +36,16 @@ const App: React.FC = () => (
     <IonReactRouter>
       <IonTabs>
         <IonRouterOutlet>
-          <Route path="/ble-test" component={BleTest} />
-          <Route path="/" render={() => <Redirect to="/ble-test" />} exact={true} />
+          <Route path="/ble-terminal" component={Terminal} />
+          <Route path="/ble-settings" component={Settings} />
+          <Route path="/" render={() => <Redirect to="/ble-terminal" />} exact={true} />
         </IonRouterOutlet>
         <IonTabBar slot="bottom">
-          <IonTabButton tab="BLE Test" href="/ble-test">
+          <IonTabButton tab="BLE Terminal" href="/ble-terminal">
             <IonIcon icon={bluetoothOutline} />
+          </IonTabButton>
+          <IonTabButton tab="BLE Settings" href="/ble-settings">
+            <IonIcon icon={settingsOutline} />
           </IonTabButton>
         </IonTabBar>
       </IonTabs>
