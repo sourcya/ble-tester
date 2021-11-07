@@ -9,6 +9,10 @@
 - [Capacitor Community Bluetooth LE Plugin](https://github.com/capacitor-community/bluetooth-le)
 
 #### Run & Build
+##### Use
+- [BLE Tester for Web (Needs Updated Desktop Chrome for Linx, Mac or Windows)](https://sourcya-ble-tester.web.app/)
+- [Android APK](https://github.com/sourcya/ble-tester/blob/main/APK/app-debug.apk)
+
 ##### Development
 - install node and npm
 > requires root/administrator access
