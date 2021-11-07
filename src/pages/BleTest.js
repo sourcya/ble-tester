@@ -12,243 +12,397 @@ import {
   IonCardHeader,
   IonToolbar,
   IonButton,
-  IonTitle
+  IonTitle,
+  IonGrid,
+  IonRow,
+  IonCol,
+  IonModal,
+  IonHeader,
+  IonButtons
  } from '@ionic/react';
 import { BleClient } from '@capacitor-community/bluetooth-le';
+import { bluetoothSharp, refreshOutline } from 'ionicons/icons';
 import { Capacitor } from '@capacitor/core';
-import { bluetoothSharp } from 'ionicons/icons';
 
 class BleTest extends React.Component {
-  constructor(props) {
-    super(props);
-    this.state = {
-      devices: [],
-      services: [],
-      selectedDevice: {},
-      data: [],
-      message: 'Idle',
-      isBtEnabled: false,
-      loading: false,
-      isConnected: false
+    constructor(props) {
+        super(props);
+        this.state = {
+            devices: [],
+            services: [],
+            selectedDevice: {},
+            data: [],
+            message: 'Idle',
+            isBtEnabled: false,
+            loading: false,
+            isConnected: false,
+            showDataModal: false
+        }
+        this.isNative = Capacitor.isNativePlatform()
     }
-    this.isNative = Capacitor.isNativePlatform()
-    
-  }
-  componentDidMount() {
-    this.getBtStatus()
-  }
-  getBtStatus = async () => {
-    try {
-      await BleClient.initialize();
-      let isBtEnabled = await BleClient.isEnabled()
-      this.setState({
-        isBtEnabled: isBtEnabled
-      })
-      if(!this.state.isBtEnabled && this.isNative) {
-        this.setState({
-          message: "Bluetooth is not enabled!"
-        })
-      }
-    }
-    catch {
-      this.catchError()
-    }
-  }
-  scanBt = async () => {
-    try {
-      this.setState({
-        devices: [],
-        selectedDevice: null,
-        data: [],
-        message: "Scanning..."
-      })
-      await BleClient.initialize();
-      let device = await BleClient.requestDevice({
-        services: [],
-        namePrefix: ""
-      })
-      console.log(device)
-      this.setState({
-        devices: [device],
-        selectedDevice: device,
-        message: "Scan Finished"
-      })
-    } catch {
-      this.catchError()
-    }
-  }
-  
-  connectBt = async () => {
-    try {
-      this.setState({
-        message: "Connecting...",
-        loading: true,
-        data: []
-      })
-      await BleClient.initialize()
-      await BleClient.disconnect(this.state.selectedDevice.deviceId)
-      await BleClient.connect(this.state.selectedDevice.deviceId)
-      await BleClient.getServices(this.state.selectedDevice.deviceId)
-        .then(
-          (services) => {
-            if(services[0]) {
-              this.setState({
-                services: services,
-                message: "Connected",
-                loading: false,
-                isConnected: true,
-                data: []
-              })
-            }
-          }
-        )
-      this.state.services ? console.log(this.state.services) : console.log('No Services Found')
-      this.recieveFromBt()
-    }
-    catch {
-      this.catchError()
-    }
-  }
 
-  disconnectBt = async () => {
-    try {
-      this.setState({
-        message: "Disconnecting...",
-        loading: true
-      })
-      await BleClient.disconnect(this.state.selectedDevice.deviceId)
-      this.setState({
-        message: "Disconnected",
-        loading: false,
-        isConnected: false
-      })
-    }
-    catch {
-      this.catchError()
-    }
-  }
-
-  recieveFromBt = async () => {
-    try {
-      this.setState({
-        message: "Recieving Data...",
-      })
-      for (let i = 0; i < this.state.services.length; i++) {
-        for (let j = 0; j < this.state.services[i].characteristics.length; j++) {
-          if (this.state.services[i].characteristics[j].properties.read) {
-            let value = await BleClient.read(
-              this.state.selectedDevice.deviceId,
-              this.state.services[i].uuid,
-              this.state.services[i].characteristics[j].uuid
-            )
-            console.log(`${value.byteLength} bytes from >> serv: ${this.state.services[i].uuid} | charx: ${this.state.services[i].characteristics[j].uuid}`);
-            this.parse(this.state.services[i].uuid, this.state.services[i].characteristics[j].uuid, value)
-          } else {
+    getBtStatus = async () => {
+        try {
+          await BleClient.initialize();
+          let isBtEnabled = await BleClient.isEnabled()
+          this.setState({
+            isBtEnabled: isBtEnabled
+          })
+          if(!this.state.isBtEnabled) {
             this.setState({
-              data: [
-                ...this.state.data,
-                {
-                  service: this.state.services[i].uuid,
-                  chx: this.state.services[i].characteristics[j].uuid,
-                  bin: "Reading is not available"
-                }
-              ]
+              message: "BT not enabled, or not supported!"
             })
           }
-        }       
-      }
-      this.disconnectBt()
+        }
+        catch(e) {
+          this.catchError(e, 'Bluetooth Unavailable')
+        }
     }
-    catch {
-      this.catchError()
-    }
-  }
 
-  parse(service, chx, data) {
-    if (data instanceof DataView) {
-        let bin = ''
-        for (let i = 0; i < data.byteLength; i++) {
-          bin += `${String.fromCharCode(data.getUint8(i))}`     
+    scanBt = async () => {
+      try {
+        this.setState({
+          devices: [],
+          selectedDevice: {},
+          data: [],
+          services: [],
+          message: "Scanning..."
+        })
+        await BleClient.initialize();
+        let device = await BleClient.requestDevice({
+          services: [],
+          optionalServices: [],
+          namePrefix: ""
+        })
+        this.setState({
+          devices: [device],
+        })
+        this.connectBt(device)
+      } catch(e) {
+        this.catchError(e, 'Scan Error')
+      }
+    }
+
+    scanBtLE = async () => {
+        try {
+          this.setState({
+            devices: [],
+            selectedDevice: null,
+            data: [],
+            services: [],
+            loading: true,
+            message: "Scanning..."
+          })
+          await BleClient.initialize();
+          await BleClient.requestLEScan(
+            {
+              services: [],
+            },
+            (device) => {
+              this.setState({
+                devices: [...this.state.devices, device]
+              })
+            }
+          );
+          setTimeout(async () => {
+            await BleClient.stopLEScan();
+            this.setState({
+              loading: false,
+              message: "Scan Finished"
+            })
+          }, 5000)
+        } catch(e) {
+          this.catchError(e, 'Scan Error')
+        }
+    }
+
+    connectBt = async (device) => {
+      try {
+        this.setState({
+          message: "Connecting...",
+          services: [],
+          loading: true,
+          data: [],
+          selectedDevice: device
+        })
+        await BleClient.initialize()
+        await BleClient.disconnect(this.state.selectedDevice.deviceId)
+        await BleClient.connect(this.state.selectedDevice.deviceId, (id) => console.log(`Device ${id} disconnected!`))
+        await BleClient.getServices(this.state.selectedDevice.deviceId)
+          .then(
+            (services) => {
+              if(services[0]) {
+                this.setState({
+                  services: services,
+                  message: "Connected",
+                  loading: false,
+                  isConnected: true,
+                  data: []
+                })
+              }
+            }
+          )
+      }
+      catch (e){
+        this.catchError(e, 'Cannot Connect Error')
+      }
+    }
+  
+    read = async (deviceId, serviceUUID, chxUUID) => {
+      try {
+        this.setState({
+          message: "Recieving Data...",
+          data:[],
+          showDataModal: true
+        })
+        await BleClient.initialize()
+        await BleClient.disconnect(deviceId)
+        await BleClient.connect(deviceId, (id) => console.log(`Device ${id} disconnected!`))
+          let value = await BleClient.read(
+            deviceId,
+            serviceUUID,
+            chxUUID
+          )
+          let text = {}
+          let bin = {}
+          for (let i = 0; i < value.byteLength; i++) {
+            bin.uint8 += value.getUint8(i)
+            text.uint8 += String.fromCharCode(value.getUint8(i))
+          }
+          this.setState({
+            data:
+              [{
+                serviceUUID: serviceUUID,
+                chxUUID: chxUUID,
+                bin: bin,
+                text: text
+              }]
+          })    
+      }
+      catch(e) {
+        this.catchError(e, 'Cannot Read Error')
+      }
+    }
+
+    notify = async (deviceId, serviceUUID, chxUUID, start = true) => {
+      try {
+        if (!start) {
+          await BleClient.stopNotifications(deviceId, serviceUUID, chxUUID)
+          return null
         }
         this.setState({
-          data: [
-            ...this.state.data,
-            {
-              service: service,
-              chx: chx,
-              bin: bin
-            }
-          ]
+          message: "Recieving Data...",
+          data: [],
+          showDataModal: true
         })
+        await BleClient.initialize()
+        await BleClient.disconnect(deviceId)
+        await BleClient.connect(deviceId, (id) => console.log(`Device ${id} disconnected!`))
+        await BleClient.startNotifications(
+          deviceId,
+          serviceUUID,
+          chxUUID,
+          (value) => {
+            let text = {}
+            let bin = {}
+            for (let i = 0; i < value.byteLength; i++) {
+              bin.uint8 += value.getUint8(i)
+              text.uint8 += String.fromCharCode(value.getUint8(i))
+            }
+            this.setState({
+              data:
+                [
+                  ...this.state.data,
+                  {
+                    notification: true,
+                    serviceUUID: serviceUUID,
+                    chxUUID: chxUUID,
+                    bin: bin,
+                    text: text
+                }]
+            })            
+          }
+        )
       }
-  }
-  
-  catchError() {
-    this.setState({
-      message: "Error",
-      loading: false,
-    })
-  }
+      catch(e) {
+        this.catchError(e, 'Cannot Read Error')
+      }
+    }
+    
+    disconnectBt = async () => {
+      try {
+          await BleClient.initialize()
+          this.setState({
+            message: "Disconnected",
+            loading: false,
+            isConnected: false,
+            data: [],
+            devices: [],
+            selectedDevice: {},
+            services: [],
+            showDataModal: false
+          })
+          this.setState({
 
-  render() {
-    return (
-      <IonPage>
-        <IonLoading
-          isOpen={this.state.loading}
-          message={'loading...'}
-          duration={10000}
-        />
-        <IonContent fullscreen>
-          <IonCardContent>
-            <IonButton disabled={!this.state.isBtEnabled} fill="outline" onClick={()=>this.scanBt()}>Scan</IonButton>
-            <IonButton disabled={!this.state.isConnected} onClick={()=>this.disconnectBt()}>Disconnect</IonButton>
-          </IonCardContent>
-          <IonCard>
-            <IonCardHeader>
-              <IonToolbar>
-                <IonTitle slot="end">{this.state.message}</IonTitle>
-                { this.state.isBtEnabled
-                  ? <IonIcon slot="end" color="warning" icon={bluetoothSharp}/>
-                  : <IonIcon slot="end" color="danger" icon={bluetoothSharp}/>
-                }
-              </IonToolbar>
-            </IonCardHeader>
-            <IonCardContent>
-              <IonList>
+          })
+      }
+      catch(e) {
+          this.catchError(e, 'Cannot Disconnect Error' )
+      }
+    }
+
+    catchError(e, message) {
+      //throw new Error(e)
+        this.setState({
+          message: message,
+          loading: false,
+          devices: [],
+          selectedDevice: {},
+          services: [],
+          showDataModal: false
+        })
+        console.error(e)
+    }
+
+    componentDidMount() {
+        this.getBtStatus()
+    }
+    
+    render() {
+        return (
+          <IonPage>
+            <IonLoading
+            isOpen={this.state.loading}
+            message={'loading...'}
+            duration={10000}
+            />
+            <IonModal 
+              isOpen={this.state.showDataModal}
+            >
+              <IonHeader translucent>
+                <IonToolbar>
+                  <IonButtons slot="end">
+                    {
+                      (this.state.data[0] && this.state.data[0].notification) &&
+                        <IonButton onclick={ () =>
+                          {
+                            this.notify(this.state.selectedDevice.deviceId, this.state.data[0].serviceUUID, this.state.data[0].chxUUID, false)
+                            this.disconnectBt()
+                          }
+                        }>Close</IonButton>
+                    }
+                    {
+                      (this.state.data[0] && !this.state.data[0].notification) &&
+                        <IonButton onclick={() => this.disconnectBt()}>Close</IonButton>
+                    }
+                    {
+                      !this.state.data[0] &&
+                        <IonButton onclick={() => this.disconnectBt()}>Close</IonButton>
+                    }
+                  </IonButtons>
+                </IonToolbar>
+              </IonHeader>
+              <IonContent fullscreen>
+                <IonList>
+                  {
+                    this.state.data.map((data) => {
+                      return (
+                        <IonItem>
+                          <IonLabel>
+                            <h3>{data.serviceUUID}</h3>
+                            <h4>{data.chxUUID}</h4>
+                            <p>{data.bin.uint8}</p>
+                            <p>{data.text.uint8}</p>
+                          </IonLabel>
+                        </IonItem>
+                      )
+                    })
+                  }
+                </IonList>
+              </IonContent>
+            </IonModal>
+            <IonContent fullscreen>
+                <IonCardContent>
+                  <IonButton disabled={!this.state.isBtEnabled} fill="outline" onClick={()=>this.scanBt()}>Scan</IonButton>
+                  <IonButton disabled={!this.state.isBtEnabled || !this.isNative } fill="outline" onClick={()=>this.scanBtLE()}>Scan LE</IonButton>
+                  <IonButton onClick={()=>this.disconnectBt()}><IonIcon icon={refreshOutline} /></IonButton>
+                </IonCardContent>
+                <IonCard>
+                    <IonCardHeader>
+                        <IonToolbar>
+                            <IonTitle slot="end">{this.state.message}</IonTitle>
+                            { this.state.isBtEnabled || this.state.message === 'Error'
+                            ? <IonIcon slot="end" color="warning" icon={bluetoothSharp}/>
+                            : <IonIcon slot="end" color="danger" icon={bluetoothSharp}/>
+                            }
+                        </IonToolbar>
+                    </IonCardHeader>
+                    <IonCardContent>
+                        <IonList>
+                            {
+                              this.state.devices.map( (device) => {
+                                return(
+                                  <IonItem button key={device.deviceId} onClick={ ()=> this.connectBt(device) }>
+                                      {
+                                        (device.name) ? 
+                                        <IonLabel>{device.name}</IonLabel> : 
+                                        <IonLabel>{device.deviceId}</IonLabel>
+                                      }
+                                  </IonItem>
+                                )
+                              })
+                            }
+                        </IonList>
+                    </IonCardContent>
+                </IonCard>
                 {
-                  this.state.devices.map( (device) => {
-                    return(
-                      <IonItem key={device.deviceId}>
-                        {(device.name) ? <IonLabel>{device.name}</IonLabel> : <IonLabel>"UNKNOWN"</IonLabel>}
-                        <IonButton slot='end' color='primary' onClick={ ()=> this.connectBt() }>Read</IonButton>
-                      </IonItem>
-                    )
-                  })
+                    this.state.services.map( (service) => {
+                        return(                        
+                            <IonCard key={service.uuid}>
+                                <IonCardHeader>
+                                    <IonLabel color='danger' text-wrap>{service.uuid}</IonLabel>
+                                </IonCardHeader>
+                                <IonCardContent>
+                                        { 
+                                          service.characteristics.map( (chx) => {
+                                              return (
+                                                <IonGrid key={chx.uuid}>
+                                                  <IonRow class="ion-justify-content-center">
+                                                    <IonCol size="12" size-xs>
+                                                      <IonTitle color='primary' size='small' text-wrap>{chx.uuid}</IonTitle>
+                                                    </IonCol>
+                                                  </IonRow>
+                                                  <IonRow class="ion-justify-content-center">
+                                                    <IonCol size="12" size-xs>
+                                                      <IonButton onClick={() => this.read(this.state.selectedDevice.deviceId, service.uuid, chx.uuid)} size='small' color='dark' disabled={!chx.properties.read}>
+                                                        <IonLabel slot='start'>read</IonLabel>
+                                                      </IonButton>
+                                                    </IonCol>
+                                                    <IonCol size="12" size-xs>
+                                                      <IonButton onClick={() => this.notify(this.state.selectedDevice.deviceId, service.uuid, chx.uuid)} size='small' color='dark' disabled={!chx.properties.notify}>
+                                                        <IonLabel slot='start'>notify</IonLabel>
+                                                      </IonButton>
+                                                    </IonCol>
+                                                    <IonCol size="12" size-xs>
+                                                      <IonButton size='small' color='dark' disabled={!chx.properties.write}>
+                                                        <IonLabel slot='start'>write</IonLabel>
+                                                      </IonButton>
+                                                    </IonCol>
+                                                  </IonRow>
+                                              </IonGrid>
+
+                                              )
+                                          })
+                                        }
+                                  </IonCardContent>
+                            </IonCard>
+                        )
+                    })
                 }
-              </IonList>
-              {this.state.data.map(
-                (data) => {
-                  return (
-                    <IonCard>
-                      <IonItem lines='none'>
-                        <IonLabel color='tertiary' text-wrap>{`SERVICE >> ${data.service}`}</IonLabel>
-                      </IonItem>
-                      <IonItem lines='none'>
-                        <IonLabel color='danger' text-wrap>{`CHX >> ${data.chx}`}</IonLabel>
-                      </IonItem>
-                      <IonItem>
-                        <IonLabel color='dark' text-wrap>{`MSG >> ${data.bin}`}</IonLabel>
-                      </IonItem>
-                    </IonCard>
-                  )
-                }
-              )}
-            </IonCardContent>
-          </IonCard>
-        </IonContent>
-      </IonPage>
-    )
-  };
-};
+            </IonContent>
+          </IonPage>
+        )
+    }
+}
 
 export default BleTest;
