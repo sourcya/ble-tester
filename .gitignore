@@ -12,6 +12,7 @@ package-lock.json
 # production
 /build
 /android
+/ios
 /resources/android
 resources/ios
 
