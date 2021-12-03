@@ -14,6 +14,7 @@ import { bluetoothSharp } from "ionicons/icons";
 
 class DevicesList extends React.Component {
   render() {
+    //console.log("DEVICES CONTENT: " + this.props.devices);
     return (
       <IonCard>
         <IonCardHeader>
@@ -27,7 +28,7 @@ class DevicesList extends React.Component {
           </IonToolbar>
           {
             !this.props.isNative && (
-                <IonLabel color="danger">
+            <IonLabel color="danger">
               Web Bluetooth is experimental on this platform.
               <a
                 rel="noreferrer"
@@ -42,7 +43,7 @@ class DevicesList extends React.Component {
         </IonCardHeader>
         <IonCardContent>
           <IonList>
-            {this.props.devices.map((device) => {
+            {this.props.devices.map && this.props.devices.map((device) => {
               return (
                 <IonItem
                   button

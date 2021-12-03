@@ -15,7 +15,7 @@ class ServicesC extends React.Component {
   render() {
     return (
       <IonList>
-      { 
+      { this.props.services.map && 
         this.props.services.map((service) => {
           return(
             <IonCard

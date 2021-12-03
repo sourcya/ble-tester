@@ -4,6 +4,7 @@ import { BleClient } from "@capacitor-community/bluetooth-le";
 import { Capacitor } from "@capacitor/core";
 import { Loading, Terminal, TopBar, Devices, Services } from "../components";
 
+
 class BleTest extends React.Component {
   constructor(props) {
     super(props);
