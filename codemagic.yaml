@@ -19,6 +19,7 @@ workflows:
                 npm install
                 npm run build
                 npx cap add android
+                npx cap build android
                 npm run resources               
             - name: Set Android SDK location
               script: |
