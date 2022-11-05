@@ -1,21 +1,33 @@
 workflows:
-    build-ionic:
-        name: Build Ionic App
+    ionic-capacitor-android-workflow:
+        name: Ionic Capacitor Android Workflow
         max_build_duration: 120
-        instance_type: mac_mini_m1
+        instance_type: mac_m1
+        environment:
+            node: latest
+        triggering:
+            events:
+                - push
+                - pull_request
+            branch_patterns:
+                - pattern: main
+                  include: true
+                  source: true
         scripts:
-            - name: Install npm dependencies for Ionic Capacitor project
-              script: | 
-                npm install
-            - name: Set up local.properties
+            - name: Install npm dependencies, Generate Resources and add Android from Capacitor
               script: |
-                touch "$CM_BUILD_DIR/android/local.properties" &&
-                echo "sdk.dir=$ANDROID_SDK_ROOT" > "$CM_BUILD_DIR/android/local.properties"
+                npm install
+                npm run build
+                npx cap add android
+                npm run resources               
+            - name: Set Android SDK location
+              script: |
+                echo "sdk.dir=$ANDROID_SDK_ROOT" > "$FCI_BUILD_DIR/android/local.properties"
             - name: Update dependencies and copy web assets to native project
-              script: | 
+              script: |
                 npx cap sync
             - name: Build Android release
-              script: | 
+              script: |
                 cd android
                 ./gradlew assembleRelease
         artifacts:
