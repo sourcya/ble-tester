@@ -3,23 +3,23 @@ workflows:
         name: Build Ionic App
         max_build_duration: 120
         instance_type: mac_mini_m1
-scripts:
-    - name: Install npm dependencies for Ionic Capacitor project
-      script: | 
-        npm install
-    - name: Set up local.properties
-      script: | 
-        echo "sdk.dir=$ANDROID_SDK_ROOT" > "$CM_BUILD_DIR/android/local.properties"
-    - name: Update dependencies and copy web assets to native project
-      script: | 
-        # if you don't need to update native dependencies, use this:
-        # npx cap copy
-        #
-        # to update native dependencies, use this command:
-        npx cap sync
-    - name: Build Android release
-      script: | 
-        cd android
-        ./gradlew assembleRelease
-artifacts:
-    - android/app/build/outputs/**/*.apk
+        scripts:
+            - name: Install npm dependencies for Ionic Capacitor project
+              script: | 
+                npm install
+            - name: Set up local.properties
+              script: | 
+                echo "sdk.dir=$ANDROID_SDK_ROOT" > "$CM_BUILD_DIR/android/local.properties"
+            - name: Update dependencies and copy web assets to native project
+              script: | 
+                # if you don't need to update native dependencies, use this:
+                # npx cap copy
+                #
+                # to update native dependencies, use this command:
+                npx cap sync
+            - name: Build Android release
+              script: | 
+                cd android
+                ./gradlew assembleRelease
+        artifacts:
+            - android/app/build/outputs/**/*.apk
