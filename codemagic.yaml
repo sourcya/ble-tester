@@ -8,14 +8,11 @@ workflows:
               script: | 
                 npm install
             - name: Set up local.properties
-              script: | 
+              script: |
+                touch "$CM_BUILD_DIR/android/local.properties" &&
                 echo "sdk.dir=$ANDROID_SDK_ROOT" > "$CM_BUILD_DIR/android/local.properties"
             - name: Update dependencies and copy web assets to native project
               script: | 
-                # if you don't need to update native dependencies, use this:
-                # npx cap copy
-                #
-                # to update native dependencies, use this command:
                 npx cap sync
             - name: Build Android release
               script: | 
