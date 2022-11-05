@@ -19,14 +19,9 @@ workflows:
                 npm install
                 npm run build
                 npx cap add android
-                npx cap build android
-                npm run resources               
-            - name: Set Android SDK location
-              script: |
                 echo "sdk.dir=$ANDROID_SDK_ROOT" > "$FCI_BUILD_DIR/android/local.properties"
-            - name: Update dependencies and copy web assets to native project
-              script: |
-                npx cap sync
+                npx cap copy
+                npm run resources               
             - name: Build Android release
               script: |
                 cd android
