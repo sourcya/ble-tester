@@ -14,16 +14,14 @@ workflows:
                   include: true
                   source: true
         scripts:
-            - name: Install npm dependencies, Generate Resources and add Android from Capacitor
+            - name: Gradle Assemble Release
               script: |
                 npm install
                 npm run build
                 npx cap add android
-                echo "sdk.dir=$ANDROID_SDK_ROOT" > "$FCI_BUILD_DIR/android/local.properties"
+                echo "sdk.dir=$ANDROID_SDK_ROOT" > ./android/local.properties"
                 npx cap copy
                 npm run resources               
-            - name: Build Android release
-              script: |
                 cd android
                 ./gradlew assembleRelease
         artifacts:
