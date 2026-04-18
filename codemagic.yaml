@@ -1,28 +1,37 @@
 workflows:
-    ionic-capacitor-android-workflow:
-        name: Ionic Capacitor Android Workflow
-        max_build_duration: 120
-        instance_type: mac_mini_m1
-        environment:
-            node: latest
-        triggering:
-            events:
-                - push
-                - pull_request
-            branch_patterns:
-                - pattern: main
-                  include: true
-                  source: true
-        scripts:
-            - name: Gradle Assemble Release
-              script: |
-                npm install
-                npm run build
-                npx cap add android
-                echo "sdk.dir=$ANDROID_SDK_ROOT" > ./android/local.properties"
-                npx cap copy
-                npm run resources               
-                cd android
-                ./gradlew assembleRelease
-        artifacts:
-            - android/app/build/outputs/**/*.apk
+  ionic-capacitor-android-workflow:
+    name: Ionic Capacitor Android Workflow
+    max_build_duration: 120
+    instance_type: mac_mini_m1
+    environment:
+      node: latest
+    triggering:
+      events:
+        - push
+        - pull_request
+      branch_patterns:
+        - pattern: main
+          include: true
+          source: true
+    scripts:
+      - name: Install dependencies
+        script: npm ci
+      - name: Typecheck and test
+        script: |
+          npm run typecheck
+          npm test
+      - name: Build web bundle
+        script: npm run build
+      - name: Sync Capacitor android
+        script: |
+          if [ ! -d android ]; then
+            npx cap add android
+          fi
+          echo "sdk.dir=$ANDROID_SDK_ROOT" > ./android/local.properties
+          npx cap sync android
+      - name: Gradle assemble release
+        script: |
+          cd android
+          ./gradlew assembleRelease
+    artifacts:
+      - android/app/build/outputs/**/*.apk

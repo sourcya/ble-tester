@@ -1,26 +1,25 @@
-import React from 'react';
-import { Redirect, Route } from 'react-router-dom';
 import {
   IonApp,
   IonIcon,
+  IonLabel,
   IonRouterOutlet,
   IonTabBar,
   IonTabButton,
-  IonTabs
+  IonTabs,
+  setupIonicReact,
 } from '@ionic/react';
 import { IonReactRouter } from '@ionic/react-router';
+import { QueryClientProvider } from '@tanstack/react-query';
 import { bluetoothOutline, settingsOutline } from 'ionicons/icons';
-import { Terminal, Settings } from './pages'
+import { Redirect, Route } from 'react-router-dom';
 
-/* Core CSS required for Ionic components to work properly */
+/* Core Ionic CSS */
 import '@ionic/react/css/core.css';
-
-/* Basic CSS for apps built with Ionic */
 import '@ionic/react/css/normalize.css';
 import '@ionic/react/css/structure.css';
 import '@ionic/react/css/typography.css';
 
-/* Optional CSS utils that can be commented out */
+/* Optional Ionic CSS utilities */
 import '@ionic/react/css/padding.css';
 import '@ionic/react/css/float-elements.css';
 import '@ionic/react/css/text-alignment.css';
@@ -28,29 +27,44 @@ import '@ionic/react/css/text-transformation.css';
 import '@ionic/react/css/flex-utils.css';
 import '@ionic/react/css/display.css';
 
-/* Theme variables */
+import '@ionic/react/css/palettes/dark.system.css';
 import './theme/variables.css';
 
-const App: React.FC = () => (
-  <IonApp>
-    <IonReactRouter>
-      <IonTabs>
-        <IonRouterOutlet>
-          <Route path="/ble-terminal" component={Terminal} />
-          <Route path="/ble-settings" component={Settings} />
-          <Route path="/" render={() => <Redirect to="/ble-terminal" />} exact={true} />
-        </IonRouterOutlet>
-        <IonTabBar slot="bottom">
-          <IonTabButton tab="BLE Terminal" href="/ble-terminal">
-            <IonIcon icon={bluetoothOutline} />
-          </IonTabButton>
-          <IonTabButton tab="BLE Settings" href="/ble-settings">
-            <IonIcon icon={settingsOutline} />
-          </IonTabButton>
-        </IonTabBar>
-      </IonTabs>
-    </IonReactRouter>
-  </IonApp>
-);
+import { ErrorBoundary } from './components/ErrorBoundary';
+import { queryClient } from './lib/queryClient';
+import SettingsPage from './pages/SettingsPage';
+import TerminalPage from './pages/TerminalPage';
 
-export default App;
+setupIonicReact({ mode: 'md' });
+
+export default function App() {
+  return (
+    <IonApp>
+      <ErrorBoundary>
+        <QueryClientProvider client={queryClient}>
+          <IonReactRouter>
+            <IonTabs>
+              <IonRouterOutlet>
+                <Route exact path="/terminal" component={TerminalPage} />
+                <Route exact path="/settings" component={SettingsPage} />
+                <Route exact path="/">
+                  <Redirect to="/terminal" />
+                </Route>
+              </IonRouterOutlet>
+              <IonTabBar slot="bottom">
+                <IonTabButton tab="terminal" href="/terminal">
+                  <IonIcon aria-hidden="true" icon={bluetoothOutline} />
+                  <IonLabel>Terminal</IonLabel>
+                </IonTabButton>
+                <IonTabButton tab="settings" href="/settings">
+                  <IonIcon aria-hidden="true" icon={settingsOutline} />
+                  <IonLabel>Settings</IonLabel>
+                </IonTabButton>
+              </IonTabBar>
+            </IonTabs>
+          </IonReactRouter>
+        </QueryClientProvider>
+      </ErrorBoundary>
+    </IonApp>
+  );
+}
