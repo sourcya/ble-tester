@@ -1,15 +1,253 @@
 #!/usr/bin/env bash
+#
+# Headless Android APK build with auto-provisioning. No Android Studio required.
+#
+# Prerequisites the script will check for (and offer to install when missing):
+#   - JDK 17..21  (Capacitor 8 + Gradle 8.x cannot use JDK 22+)
+#   - Android command-line tools (sdkmanager)
+#   - platform-tools, platforms;android-35, build-tools;35.0.0
+#
+# Usage:
+#   sh build_android            # debug build → APK/app-debug.apk
+#   sh build_android release    # release build → APK/app-release.apk (needs signing config)
+#   NONINTERACTIVE=1 sh build_android   # auto-yes to every install prompt
+#
 set -euo pipefail
 
-npm ci
+# Re-exec under bash when invoked as `sh build_android` on a system whose
+# /bin/sh is dash — we rely on bash features below (arrays, [[ ]]).
+if [ -z "${BASH_VERSION:-}" ]; then
+  exec bash "$0" "$@"
+fi
+
+BUILD_TYPE="${1:-debug}"
+ROOT="$(cd "$(dirname "$0")" && pwd)"
+ANDROID_DIR="$ROOT/android"
+
+# ---- Output helpers ---------------------------------------------------------
+red()   { printf '\033[31m%s\033[0m\n' "$*"; }
+green() { printf '\033[32m%s\033[0m\n' "$*"; }
+blue()  { printf '\033[34m%s\033[0m\n' "$*"; }
+yellow(){ printf '\033[33m%s\033[0m\n' "$*"; }
+
+confirm() {
+  # confirm "Prompt text" — returns 0 on yes. Default=yes. Honors NONINTERACTIVE=1.
+  local prompt="$1"
+  if [ "${NONINTERACTIVE:-0}" = "1" ]; then return 0; fi
+  if [ ! -t 0 ]; then
+    yellow "Not running in a TTY — assuming 'no' for: $prompt"
+    return 1
+  fi
+  read -r -p "$(printf '\033[33m%s [Y/n] \033[0m' "$prompt")" ans || true
+  [[ -z "$ans" || "$ans" =~ ^[Yy]$ ]]
+}
+
+require_cmd() {
+  command -v "$1" >/dev/null 2>&1 || { red "ERROR: '$1' not in PATH."; exit 1; }
+}
+require_cmd node
+require_cmd npm
+require_cmd curl
+require_cmd unzip
+
+# ---- OS detection for install hints ----------------------------------------
+OS_FAMILY="unknown"
+PKG_INSTALL=""
+JDK_PKG=""
+if [ -f /etc/os-release ]; then
+  . /etc/os-release
+  case "${ID_LIKE:-$ID}" in
+    *fedora*|*rhel*|*centos*)
+      OS_FAMILY="fedora"; PKG_INSTALL="sudo dnf install -y"; JDK_PKG="java-21-openjdk-devel";;
+    *debian*|*ubuntu*)
+      OS_FAMILY="debian"; PKG_INSTALL="sudo apt-get update && sudo apt-get install -y"; JDK_PKG="openjdk-21-jdk";;
+    *arch*)
+      OS_FAMILY="arch";   PKG_INSTALL="sudo pacman -S --noconfirm"; JDK_PKG="jdk21-openjdk";;
+  esac
+elif [ "$(uname -s)" = "Darwin" ]; then
+  OS_FAMILY="macos";  PKG_INSTALL="brew install"; JDK_PKG="openjdk@21"
+fi
+
+# ---- JDK detection ----------------------------------------------------------
+detect_java_major() {
+  local jh="$1"
+  if [ -x "$jh/bin/javac" ]; then
+    "$jh/bin/javac" --version 2>&1 | awk '{print $2}' | cut -d. -f1
+  fi
+}
+is_supported_major() {
+  [ -n "${1:-}" ] && [ "$1" -ge 17 ] && [ "$1" -le 21 ] 2>/dev/null
+}
+pick_java_home() {
+  if [ -n "${JAVA_HOME:-}" ]; then
+    local v; v="$(detect_java_major "$JAVA_HOME")"
+    if is_supported_major "$v"; then echo "$JAVA_HOME"; return; fi
+    yellow "JAVA_HOME=$JAVA_HOME points at JDK ${v:-?} — needs 17..21, ignoring."
+  fi
+  local candidates=()
+  for d in \
+    /usr/lib/jvm/java-21-openjdk* /usr/lib/jvm/java-17-openjdk* \
+    /usr/lib/jvm/temurin-21* /usr/lib/jvm/temurin-17* \
+    /opt/homebrew/opt/openjdk@21 /opt/homebrew/opt/openjdk@17 \
+    /Library/Java/JavaVirtualMachines/*/Contents/Home
+  do
+    [ -d "$d" ] && candidates+=("$d")
+  done
+  for c in "${candidates[@]}"; do
+    local v; v="$(detect_java_major "$c")"
+    if is_supported_major "$v"; then echo "$c"; return; fi
+  done
+  echo ""
+}
+
+install_jdk() {
+  if [ -z "$PKG_INSTALL" ] || [ -z "$JDK_PKG" ]; then
+    red "Unknown OS — install JDK 21 manually and set JAVA_HOME."
+    return 1
+  fi
+  yellow "Will run: $PKG_INSTALL $JDK_PKG"
+  if ! confirm "Install JDK 21 now?"; then return 1; fi
+  eval "$PKG_INSTALL $JDK_PKG"
+}
+
+JH="$(pick_java_home)"
+if [ -z "$JH" ]; then
+  red "No compatible JDK (17..21) found on this system."
+  yellow "Capacitor 8 + Gradle 8.x cannot run on JDK 22+. A separate JDK must be installed alongside any newer one."
+  if install_jdk; then
+    JH="$(pick_java_home)"
+  fi
+  if [ -z "$JH" ]; then
+    red "Aborting — install JDK 21 and re-run (e.g. $PKG_INSTALL $JDK_PKG)."
+    exit 1
+  fi
+fi
+export JAVA_HOME="$JH"
+export PATH="$JAVA_HOME/bin:$PATH"
+green "Using JAVA_HOME=$JAVA_HOME ($(javac --version 2>&1))"
+
+# ---- Android SDK detection + provisioning ----------------------------------
+: "${ANDROID_SDK_ROOT:=${ANDROID_HOME:-}}"
+if [ -z "${ANDROID_SDK_ROOT:-}" ]; then
+  for d in "$HOME/Android/Sdk" "$HOME/Library/Android/sdk" /usr/lib/android-sdk /opt/android-sdk; do
+    [ -d "$d" ] && ANDROID_SDK_ROOT="$d" && break
+  done
+fi
+
+CMDLINE_TOOLS_VERSION="13114758"
+CMDLINE_TOOLS_URL_LINUX="https://dl.google.com/android/repository/commandlinetools-linux-${CMDLINE_TOOLS_VERSION}_latest.zip"
+CMDLINE_TOOLS_URL_MAC="https://dl.google.com/android/repository/commandlinetools-mac-${CMDLINE_TOOLS_VERSION}_latest.zip"
+
+install_cmdline_tools() {
+  local sdk_root="${ANDROID_SDK_ROOT:-$HOME/Android/Sdk}"
+  local url="$CMDLINE_TOOLS_URL_LINUX"
+  [ "$(uname -s)" = "Darwin" ] && url="$CMDLINE_TOOLS_URL_MAC"
+  yellow "Will download Android command-line tools (~180 MB) to: $sdk_root/cmdline-tools/latest"
+  yellow "Source: $url"
+  if ! confirm "Download and install?"; then return 1; fi
+  mkdir -p "$sdk_root/cmdline-tools"
+  local tmp; tmp="$(mktemp -d)"
+  blue "Downloading…"
+  curl -fL --progress-bar -o "$tmp/tools.zip" "$url"
+  blue "Extracting…"
+  unzip -q "$tmp/tools.zip" -d "$tmp"
+  rm -rf "$sdk_root/cmdline-tools/latest"
+  mv "$tmp/cmdline-tools" "$sdk_root/cmdline-tools/latest"
+  rm -rf "$tmp"
+  export ANDROID_SDK_ROOT="$sdk_root"
+  export ANDROID_HOME="$sdk_root"
+  green "Command-line tools installed at $sdk_root/cmdline-tools/latest"
+}
+
+SDKMANAGER=""
+find_sdkmanager() {
+  if [ -n "${ANDROID_SDK_ROOT:-}" ]; then
+    for candidate in \
+      "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" \
+      "$ANDROID_SDK_ROOT/cmdline-tools/bin/sdkmanager" \
+      "$ANDROID_SDK_ROOT/tools/bin/sdkmanager"
+    do
+      [ -x "$candidate" ] && { SDKMANAGER="$candidate"; return 0; }
+    done
+  fi
+  command -v sdkmanager >/dev/null 2>&1 && SDKMANAGER="$(command -v sdkmanager)" && return 0
+  return 1
+}
+
+if ! find_sdkmanager; then
+  red "sdkmanager not found."
+  if install_cmdline_tools; then
+    find_sdkmanager || { red "sdkmanager still missing after install."; exit 1; }
+  else
+    red "Aborting — install the Android command-line tools and re-run."
+    exit 1
+  fi
+fi
+
+export ANDROID_SDK_ROOT="${ANDROID_SDK_ROOT:-$HOME/Android/Sdk}"
+export ANDROID_HOME="$ANDROID_SDK_ROOT"
+export PATH="$ANDROID_SDK_ROOT/cmdline-tools/latest/bin:$ANDROID_SDK_ROOT/platform-tools:$PATH"
+green "Using ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT ($SDKMANAGER)"
+
+# ---- SDK components --------------------------------------------------------
+need_sdk_components=0
+for d in \
+  "$ANDROID_SDK_ROOT/platform-tools" \
+  "$ANDROID_SDK_ROOT/platforms/android-35" \
+  "$ANDROID_SDK_ROOT/build-tools/35.0.0"
+do
+  [ -d "$d" ] || { need_sdk_components=1; yellow "Missing: ${d##*/}"; }
+done
+
+if [ "$need_sdk_components" = "1" ]; then
+  if confirm "Install missing SDK components (platform-tools, platforms;android-35, build-tools;35.0.0)?"; then
+    blue "Accepting SDK licences…"
+    yes | "$SDKMANAGER" --licenses >/dev/null || true
+    blue "Installing components…"
+    "$SDKMANAGER" "platform-tools" "platforms;android-35" "build-tools;35.0.0"
+  else
+    red "Aborting — required SDK components are missing."
+    exit 1
+  fi
+fi
+
+# ---- Install deps + build web bundle ---------------------------------------
+cd "$ROOT"
+if [ ! -d node_modules ]; then
+  blue "Installing npm dependencies…"
+  npm ci
+fi
+blue "Building web bundle…"
 npm run build
-if [ ! -d android ]; then
+
+# ---- Capacitor sync --------------------------------------------------------
+if [ ! -d "$ANDROID_DIR" ]; then
+  blue "Scaffolding android/ with npx cap add android…"
   npx cap add android
 fi
+blue "npx cap sync android…"
 npx cap sync android
-cd android
-./gradlew assembleDebug
-cd ..
+
+# Tell Gradle where the SDK is without relying on env in its child shells.
+printf 'sdk.dir=%s\n' "$ANDROID_SDK_ROOT" > "$ANDROID_DIR/local.properties"
+
+# ---- Gradle build ----------------------------------------------------------
+cd "$ANDROID_DIR"
+GRADLE_TASK="assembleDebug"
+[ "$BUILD_TYPE" = "release" ] && GRADLE_TASK="assembleRelease"
+
+blue "./gradlew $GRADLE_TASK (headless, no daemon)…"
+./gradlew --no-daemon --stacktrace "$GRADLE_TASK"
+
+# ---- Copy APK out ----------------------------------------------------------
+cd "$ROOT"
 mkdir -p APK
-cp android/app/build/outputs/apk/debug/app-debug.apk APK/app-debug.apk
-echo "APK written to APK/app-debug.apk"
+APK_SRC="android/app/build/outputs/apk/$BUILD_TYPE/app-$BUILD_TYPE.apk"
+if [ -f "$APK_SRC" ]; then
+  cp "$APK_SRC" "APK/app-$BUILD_TYPE.apk"
+  green "APK written to APK/app-$BUILD_TYPE.apk"
+else
+  red "Build succeeded but APK not found at $APK_SRC"
+  find android/app/build/outputs -name '*.apk' -print 2>/dev/null
+  exit 1
+fi
